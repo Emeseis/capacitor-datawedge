@@ -1,11 +1,15 @@
-# Capacitor DataWedge - community maintained plugin
+> I no longer maintain this library as I've fully moved on to using TWA's, please fork it or look for alternatives.
 
+> I am willing to pass on the npm `capacitor-datawedge` package name, please contact me if you're interested.
+
+# Capacitor DataWedge - community maintained plugin
 ![capacitor-version](https://img.shields.io/badge/Capacitor-v7-lightgreen)
 ![capacitor-version](https://img.shields.io/badge/Capacitor-v3--v6-orange)
 ![version](https://img.shields.io/npm/v/capacitor-datawedge)
 ![downloads](https://img.shields.io/npm/dm/capacitor-datawedge)
 ![contributors](https://img.shields.io/github/contributors/jkbz64/capacitor-datawedge)
 ![license](https://img.shields.io/npm/l/capacitor-datawedge)
+
 
 This plugin allows you to simply gain access to receiving barcode data and use some api methods from the DataWedge API designed for Capacitor with Zebra devices.
 
