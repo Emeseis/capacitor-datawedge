@@ -71,9 +71,18 @@ public class DataWedgePlugin extends Plugin {
         barcodeProps.putString("scanner_input_enabled", "true");
         barcodeConfig.putBundle("PARAM_LIST", barcodeProps);
 
+        Bundle keystrokeConfig = new Bundle();
+        keystrokeConfig.putString("PLUGIN_NAME", "KEYSTROKE");
+        keystrokeConfig.putString("RESET_CONFIG", "true");
+        
+        Bundle keystrokeProps = new Bundle();
+        keystrokeProps.putString("keystroke_output_enabled", "false");
+        keystrokeConfig.putBundle("PARAM_LIST", keystrokeProps);
+
         ArrayList<Bundle> pluginConfigs = new ArrayList<>();
         pluginConfigs.add(intentConfig);
         pluginConfigs.add(barcodeConfig);
+        pluginConfigs.add(keystrokeConfig);
 
         profileConfig.putParcelableArrayList("PLUGIN_CONFIG", pluginConfigs);
 

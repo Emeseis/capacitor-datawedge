@@ -1,7 +1,7 @@
 {
   "name": "capacitor-datawedge",
   "version": "0.3.5",
-  "description": "DataWedge plugin for capacitor",
+  "description": "DataWedge plugin for Capacitor",
   "main": "dist/plugin.cjs.js",
   "module": "dist/esm/index.js",
   "types": "dist/esm/index.d.ts",
@@ -11,15 +11,8 @@
     "android/build.gradle",
     "dist/"
   ],
-  "author": "jkbz64",
+  "author": "",
   "license": "BSD-3-Clause",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/jkbz64/capacitor-datawedge.git"
-  },
-  "bugs": {
-    "url": "https://github.com/jkbz64/capacitor-datawedge/issues"
-  },
   "keywords": [
     "capacitor",
     "plugin",
