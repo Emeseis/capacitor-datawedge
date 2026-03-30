@@ -29,6 +29,11 @@ export type RegisterOptions = {
 
 export interface DataWedgePlugin {
   /**
+   * Automatically register and configure a profile in DataWedge for the current application.
+   */
+  registerProfile(options?: { name?: string }): Promise<void>;
+
+  /**
    * Enables DataWedge
    *
    * Broadcasts intent action with `.ENABLE_DATAWEDGE` extra set to `true`

@@ -3,6 +3,10 @@ import { WebPlugin } from '@capacitor/core';
 import type { DataWedgePlugin } from './definitions';
 
 export class DataWedgeWeb extends WebPlugin implements DataWedgePlugin {
+  async registerProfile(): Promise<void> {
+    throw 'DataWedge is not supported on web';
+  }
+
   async enable(): Promise<void> {
     throw 'DataWedge is not supported on web';
   }

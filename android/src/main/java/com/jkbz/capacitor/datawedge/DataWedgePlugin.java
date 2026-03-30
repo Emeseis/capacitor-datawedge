@@ -16,17 +16,72 @@ import android.content.BroadcastReceiver;
 import android.content.ActivityNotFoundException;
 
 import android.os.Build;
+import android.os.Bundle;
 
 import android.util.Log;
-
+import java.util.ArrayList;
 
 @CapacitorPlugin(name = "DataWedge")
 public class DataWedgePlugin extends Plugin {
 
     private final DataWedge implementation = new DataWedge();
 
-    // This is the default and can be changed when re-registering
     private String scanIntent = "com.capacitor.datawedge.RESULT_ACTION";
+
+    @PluginMethod
+    public void registerProfile(PluginCall call) {
+        String profileName = call.getString("name", "CapacitorDataWedgeProfile");
+        Context context = getBridge().getContext();
+        String packageName = context.getPackageName();
+
+        Intent createIntent = new Intent();
+        createIntent.setAction("com.symbol.datawedge.api.ACTION");
+        createIntent.putExtra("com.symbol.datawedge.api.CREATE_PROFILE", profileName);
+        context.sendBroadcast(createIntent);
+
+        Intent configIntent = new Intent();
+        configIntent.setAction("com.symbol.datawedge.api.ACTION");
+
+        Bundle profileConfig = new Bundle();
+        profileConfig.putString("PROFILE_NAME", profileName);
+        profileConfig.putString("PROFILE_ENABLED", "true");
+        profileConfig.putString("CONFIG_MODE", "OVERWRITE");
+
+        Bundle appConfig = new Bundle();
+        appConfig.putString("PACKAGE_NAME", packageName);
+        appConfig.putStringArray("ACTIVITY_LIST", new String[]{"*"});
+        profileConfig.putParcelableArray("APP_LIST", new Bundle[]{appConfig});
+
+        Bundle intentConfig = new Bundle();
+        intentConfig.putString("PLUGIN_NAME", "INTENT");
+        intentConfig.putString("RESET_CONFIG", "true");
+        
+        Bundle intentProps = new Bundle();
+        intentProps.putString("intent_output_enabled", "true");
+        intentProps.putString("intent_action", scanIntent);
+        intentProps.putString("intent_delivery", "2");
+        intentConfig.putBundle("PARAM_LIST", intentProps);
+
+        Bundle barcodeConfig = new Bundle();
+        barcodeConfig.putString("PLUGIN_NAME", "BARCODE");
+        barcodeConfig.putString("RESET_CONFIG", "true");
+        
+        Bundle barcodeProps = new Bundle();
+        barcodeProps.putString("scanner_selection", "auto");
+        barcodeProps.putString("scanner_input_enabled", "true");
+        barcodeConfig.putBundle("PARAM_LIST", barcodeProps);
+
+        ArrayList<Bundle> pluginConfigs = new ArrayList<>();
+        pluginConfigs.add(intentConfig);
+        pluginConfigs.add(barcodeConfig);
+
+        profileConfig.putParcelableArrayList("PLUGIN_CONFIG", pluginConfigs);
+
+        configIntent.putExtra("com.symbol.datawedge.api.SET_CONFIG", profileConfig);
+        context.sendBroadcast(configIntent);
+
+        call.resolve();
+    }
 
     @PluginMethod
     public void enable(PluginCall call) {
@@ -34,6 +89,7 @@ public class DataWedgePlugin extends Plugin {
 
         try {
             broadcast(intent);
+            call.resolve();
         } catch (ActivityNotFoundException e) {
             call.reject("DataWedge is not installed or not running");
         }
@@ -44,6 +100,7 @@ public class DataWedgePlugin extends Plugin {
 
         try {
             broadcast(intent);
+            call.resolve();
         } catch (ActivityNotFoundException e) {
             call.reject("DataWedge is not installed or not running");
         }
@@ -55,6 +112,7 @@ public class DataWedgePlugin extends Plugin {
 
         try {
             broadcast(intent);
+            call.resolve();
         } catch (ActivityNotFoundException e) {
             call.reject("DataWedge is not installed or not running");
         }
@@ -66,6 +124,7 @@ public class DataWedgePlugin extends Plugin {
 
         try {
             broadcast(intent);
+            call.resolve();
         } catch (ActivityNotFoundException e) {
             call.reject("DataWedge is not installed or not running");
         }
@@ -77,6 +136,7 @@ public class DataWedgePlugin extends Plugin {
 
          try {
             broadcast(intent);
+            call.resolve();
          } catch (ActivityNotFoundException e) {
             call.reject("DataWedge is not installed or not running");
          }
@@ -88,6 +148,7 @@ public class DataWedgePlugin extends Plugin {
 
         try {
             broadcast(intent);
+            call.resolve();
         } catch (ActivityNotFoundException e) {
             call.reject("DataWedge is not installed or not running");
         }
@@ -114,6 +175,7 @@ public class DataWedgePlugin extends Plugin {
             }
 
             isReceiverRegistered = true;
+            call.resolve();
         } catch(Exception e) {
             Log.d("Capacitor/DataWedge", "Failed to register event receiver");
         }
