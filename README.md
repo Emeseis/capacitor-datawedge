@@ -6,7 +6,7 @@ This plugin allows you to receive and handle barcode scan data on Zebra mobile c
 ## Installation
 
 ```bash
-npm install git+https://github.com/Emeseis/capacitor-datawedge2
+npm install git+https://github.com/Emeseis/capacitor-datawedge
 npx cap sync android
 ```
 
