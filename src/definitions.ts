@@ -18,6 +18,22 @@ export interface ScanListenerEvent {
 
 export type ScanListener = (state: ScanListenerEvent) => void;
 
+export type ScannerStatus = 'WAITING' | 'SCANNING' | 'IDLE' | 'DISABLED' | 'CONNECTED' | 'DISCONNECTED';
+
+export interface ScannerStatusListenerEvent {
+  /**
+   * Current state reported by DataWedge for the scanner in the active profile.
+   */
+  status: ScannerStatus;
+
+  /**
+   * Name of the DataWedge profile that emitted the status.
+   */
+  profileName: string | null;
+}
+
+export type ScannerStatusListener = (state: ScannerStatusListenerEvent) => void;
+
 export type RegisterOptions = {
   /**
    * Intent action name to listen for
@@ -109,6 +125,11 @@ export interface DataWedgePlugin {
    * @since 0.1.0
    */
   addListener(eventName: 'scan', listenerFunc: ScanListener): Promise<PluginListenerHandle>;
+
+  /**
+   * Listen for scanner status changes reported by DataWedge.
+   */
+  addListener(eventName: 'scannerStatus', listenerFunc: ScannerStatusListener): Promise<PluginListenerHandle>;
 
   /**
    * Internal method to register intent broadcast receiver
