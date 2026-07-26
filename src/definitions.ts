@@ -43,11 +43,23 @@ export type RegisterOptions = {
   intent?: string;
 };
 
+export interface RegisterProfileOptions {
+  /**
+   * DataWedge profile name.
+   */
+  name?: string;
+
+  /**
+   * Intent action used exclusively to deliver scans to this application.
+   */
+  intentAction?: string;
+}
+
 export interface DataWedgePlugin {
   /**
    * Automatically register and configure a profile in DataWedge for the current application.
    */
-  registerProfile(options?: { name?: string }): Promise<void>;
+  registerProfile(options?: RegisterProfileOptions): Promise<void>;
 
   /**
    * Enables DataWedge

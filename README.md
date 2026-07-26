@@ -20,17 +20,22 @@ The `registerProfile()` method automatically:
 2. Configures **Intent Output** to "Broadcast Intent".
 3. **Disables Keystroke Output** to prevent duplicate data or keyboard simulation.
 4. Links the profile specifically to your application's package name.
+5. Restricts Intent Output delivery to that package.
 
 ## API
 
 All methods are fully asynchronous and return a `Promise` after DataWedge confirms the command result. Profile registration validates the result of every configured module. The promise is rejected with the DataWedge result code when a command or profile module fails, or with `DATAWEDGE_TIMEOUT` when DataWedge does not respond within 10 seconds.
 
-### registerProfile(options?: { name?: string })
+### registerProfile(options?: { name?: string; intentAction?: string })
 
-Creates and configures the Zebra DataWedge profile for the current app. Default name is `CapacitorDataWedgeProfile`.
+Creates or updates the Zebra DataWedge profile for the current app. Default name is `CapacitorDataWedgeProfile`.
+Use a package-specific profile name and intent action when multiple variants of the same app can be installed together.
 
 ```typescript
-registerProfile({ name: 'MyCustomProfile' }) => Promise<void>
+registerProfile({
+  name: 'MyCustomProfile.com.example.app',
+  intentAction: 'com.example.app.datawedge.SCAN',
+}) => Promise<void>
 ```
 
 ### addListener('scan', ...)

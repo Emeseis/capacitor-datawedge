@@ -95,6 +95,15 @@ public class DataWedgePlugin extends Plugin {
         String profileName = call.getString("name", "CapacitorDataWedgeProfile");
         Context context = getBridge().getContext();
         String packageName = context.getPackageName();
+        String intentAction = call.getString("intentAction");
+
+        try {
+            setScanIntent(context, intentAction);
+        } catch (Exception e) {
+            Log.e(TAG, "Failed to update scan intent receiver", e);
+            call.reject("Failed to update DataWedge scan intent receiver", e);
+            return;
+        }
 
         Intent createIntent = new Intent();
         createIntent.setAction("com.symbol.datawedge.api.ACTION");
@@ -106,7 +115,7 @@ public class DataWedgePlugin extends Plugin {
         Bundle profileConfig = new Bundle();
         profileConfig.putString("PROFILE_NAME", profileName);
         profileConfig.putString("PROFILE_ENABLED", "true");
-        profileConfig.putString("CONFIG_MODE", "OVERWRITE");
+        profileConfig.putString("CONFIG_MODE", "UPDATE");
 
         Bundle appConfig = new Bundle();
         appConfig.putString("PACKAGE_NAME", packageName);
@@ -121,6 +130,10 @@ public class DataWedgePlugin extends Plugin {
         intentProps.putString("intent_output_enabled", "true");
         intentProps.putString("intent_action", scanIntent);
         intentProps.putString("intent_delivery", "2");
+
+        Bundle intentComponent = new Bundle();
+        intentComponent.putString("PACKAGE_NAME", packageName);
+        intentProps.putParcelableArray("intent_component_info", new Bundle[]{intentComponent});
         intentConfig.putBundle("PARAM_LIST", intentProps);
 
         Bundle barcodeConfig = new Bundle();
@@ -150,7 +163,10 @@ public class DataWedgePlugin extends Plugin {
         configIntent.putExtra("com.symbol.datawedge.api.SET_CONFIG", profileConfig);
 
         sendCommand(createIntent, "CREATE_PROFILE", result -> {
-            if (result.success || isResultCode(result, "PROFILE_ALREADY_EXIST", "PROFILE_ALREADY_EXISTS")) {
+            if (result.success) {
+                sendCompleteCommand(call, configIntent, "SET_CONFIG");
+            } else if (isResultCode(result, "PROFILE_ALREADY_EXIST", "PROFILE_ALREADY_EXISTS")) {
+                profileConfig.remove("APP_LIST");
                 sendCompleteCommand(call, configIntent, "SET_CONFIG");
             } else {
                 rejectCall(call, result);
@@ -202,21 +218,27 @@ public class DataWedgePlugin extends Plugin {
     public void __registerReceiver(PluginCall call) { 
         Context context = getBridge().getContext();
 
-        final String intentName = call.getString("intent");
-        if (intentName != null) this.scanIntent = intentName;
-
         try {
-            if (isReceiverRegistered) {
-                context.unregisterReceiver(broadcastReceiver);
-                isReceiverRegistered = false;
-            }
-
-            registerBroadcastReceiver(context);
+            setScanIntent(context, call.getString("intent"));
             call.resolve();
         } catch(Exception e) {
             Log.e(TAG, "Failed to register event receiver", e);
             call.reject("Failed to register DataWedge event receiver", e);
         }
+    }
+
+    private void setScanIntent(Context context, String intentAction) {
+        if (intentAction == null || intentAction.trim().isEmpty() || intentAction.equals(scanIntent)) {
+            return;
+        }
+
+        if (isReceiverRegistered) {
+            context.unregisterReceiver(broadcastReceiver);
+            isReceiverRegistered = false;
+        }
+
+        scanIntent = intentAction;
+        registerBroadcastReceiver(context);
     }
 
     private void registerBroadcastReceiver(Context context) {
