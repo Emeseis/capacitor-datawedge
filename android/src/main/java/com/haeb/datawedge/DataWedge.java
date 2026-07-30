@@ -1,6 +1,5 @@
 package com.haeb.datawedge;
 
-import android.util.Log;
 import android.content.Intent;
 
 public class DataWedge {
@@ -19,6 +18,22 @@ public class DataWedge {
         Intent intent = new Intent();
         intent.setAction(DATAWEDGE_PACKAGE + ".ACTION");
         intent.putExtra("com.symbol.datawedge.api.ENABLE_DATAWEDGE", false);
+
+        return intent;
+    }
+
+    public Intent deleteProfile(String profileName) {
+        Intent intent = new Intent();
+        intent.setAction(DATAWEDGE_PACKAGE + ".ACTION");
+        intent.putExtra("com.symbol.datawedge.api.DELETE_PROFILE", new String[]{profileName});
+
+        return intent;
+    }
+
+    public Intent getActiveProfile() {
+        Intent intent = new Intent();
+        intent.setAction(DATAWEDGE_PACKAGE + ".ACTION");
+        intent.putExtra("com.symbol.datawedge.api.GET_ACTIVE_PROFILE", "");
 
         return intent;
     }

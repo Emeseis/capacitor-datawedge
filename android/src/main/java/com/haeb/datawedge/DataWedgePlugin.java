@@ -36,18 +36,33 @@ public class DataWedgePlugin extends Plugin {
     private static final String DATAWEDGE_RESULT_ACTION = "com.symbol.datawedge.api.RESULT_ACTION";
     private static final String EXTRA_COMMAND_IDENTIFIER = "COMMAND_IDENTIFIER";
     private static final String EXTRA_NOTIFICATION = "com.symbol.datawedge.api.NOTIFICATION";
+    private static final String EXTRA_RESULT_GET_ACTIVE_PROFILE = "com.symbol.datawedge.api.RESULT_GET_ACTIVE_PROFILE";
     private static final String EXTRA_SEND_RESULT = "SEND_RESULT";
     private static final String EXTRA_RESULT_LIST = "RESULT_LIST";
     private static final String NOTIFICATION_TYPE_SCANNER_STATUS = "SCANNER_STATUS";
     private static final String SEND_RESULT_LAST = "LAST_RESULT";
     private static final String SEND_RESULT_COMPLETE = "COMPLETE_RESULT";
     private static final long COMMAND_TIMEOUT_MS = 10_000;
+    private static final long ACTIVE_PROFILE_RETRY_DELAY_MS = 100;
+    private static final long SCANNER_RECONCILE_DELAY_MS = 50;
 
     private final DataWedge implementation = new DataWedge();
     private final Handler timeoutHandler = new Handler(Looper.getMainLooper());
     private final Map<String, PendingCommand> pendingCommands = new ConcurrentHashMap<>();
+    private final Object activeProfileLock = new Object();
+    private PendingActiveProfile pendingActiveProfile;
 
     private String scanIntent = "com.capacitor.datawedge.RESULT_ACTION";
+    private String managedProfileName;
+    private String scannerStatus;
+    private boolean scannerDesiredSuspended;
+    private boolean scannerDesiredStateSet;
+    private boolean scannerCommandInFlight;
+    private boolean scannerSuspendedClaimed;
+    private boolean scannerResetRequired;
+    private PluginCall pendingScannerStateCall;
+    private boolean pendingScannerState;
+    private Runnable scannerReconcileRunnable;
 
     @Override
     public void load() {
@@ -87,6 +102,19 @@ public class DataWedgePlugin extends Plugin {
         }
         pendingCommands.clear();
 
+        synchronized (activeProfileLock) {
+            if (pendingActiveProfile != null) {
+                timeoutHandler.removeCallbacks(pendingActiveProfile.timeout);
+                pendingActiveProfile = null;
+            }
+        }
+
+        if (scannerReconcileRunnable != null) {
+            timeoutHandler.removeCallbacks(scannerReconcileRunnable);
+            scannerReconcileRunnable = null;
+        }
+        pendingScannerStateCall = null;
+
         super.handleOnDestroy();
     }
 
@@ -102,6 +130,7 @@ public class DataWedgePlugin extends Plugin {
             return;
         }
         profileName = profileName.trim();
+        managedProfileName = profileName;
 
         if (intentAction != null && intentAction.trim().isEmpty()) {
             call.reject("DataWedge scan intent action must not be empty", "PARAMETER_INVALID");
@@ -137,11 +166,13 @@ public class DataWedgePlugin extends Plugin {
         intentProps.putString("intent_output_enabled", "true");
         intentProps.putString("intent_action", scanIntent);
         intentProps.putString("intent_category", Intent.CATEGORY_DEFAULT);
-        intentProps.putString("intent_delivery", "2");
+        intentProps.putInt("intent_delivery", 2);
 
         Bundle intentComponent = new Bundle();
         intentComponent.putString("PACKAGE_NAME", packageName);
-        intentProps.putParcelableArray("intent_component_info", new Bundle[]{intentComponent});
+        ArrayList<Bundle> intentComponents = new ArrayList<>();
+        intentComponents.add(intentComponent);
+        intentProps.putParcelableArrayList("intent_component_info", intentComponents);
         intentConfig.putBundle("PARAM_LIST", intentProps);
 
         Bundle barcodeConfig = new Bundle();
@@ -178,6 +209,68 @@ public class DataWedgePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void deleteProfile(PluginCall call) {
+        String profileName = call.getString("name");
+        if (profileName == null || profileName.trim().isEmpty()) {
+            call.reject("DataWedge profile name must not be empty", "PROFILE_NAME_EMPTY");
+            return;
+        }
+
+        sendCommand(call, implementation.deleteProfile(profileName.trim()), "DELETE_PROFILE");
+    }
+
+    @PluginMethod
+    public void getActiveProfile(PluginCall call) {
+        if (!isReceiverRegistered) {
+            try {
+                registerBroadcastReceiver(getBridge().getContext());
+            } catch (Exception e) {
+                call.reject(
+                    "Failed to register DataWedge result receiver",
+                    "RESULT_RECEIVER_REGISTRATION_FAILED",
+                    e
+                );
+                return;
+            }
+        }
+
+        synchronized (activeProfileLock) {
+            if (pendingActiveProfile != null) {
+                call.reject("A DataWedge active profile query is already pending", "QUERY_ALREADY_PENDING");
+                return;
+            }
+
+            Runnable timeout = () -> {
+                PluginCall timedOutCall;
+                synchronized (activeProfileLock) {
+                    if (pendingActiveProfile == null || pendingActiveProfile.call != call) return;
+                    timedOutCall = pendingActiveProfile.call;
+                    pendingActiveProfile = null;
+                }
+
+                timedOutCall.reject(
+                    "DataWedge did not return the active profile within " + COMMAND_TIMEOUT_MS + " ms",
+                    "DATAWEDGE_TIMEOUT"
+                );
+            };
+            pendingActiveProfile = new PendingActiveProfile(call, timeout);
+            timeoutHandler.postDelayed(timeout, COMMAND_TIMEOUT_MS);
+        }
+
+        try {
+            broadcast(implementation.getActiveProfile());
+        } catch (Exception e) {
+            synchronized (activeProfileLock) {
+                if (pendingActiveProfile != null && pendingActiveProfile.call == call) {
+                    timeoutHandler.removeCallbacks(pendingActiveProfile.timeout);
+                    pendingActiveProfile = null;
+                }
+            }
+            call.reject("Failed to query the active DataWedge profile", "BROADCAST_FAILED", e);
+        }
+    }
+
+    @PluginMethod
     public void disable(PluginCall call) {
         sendCommand(call, implementation.disable(), "ENABLE_DATAWEDGE");
     }
@@ -194,12 +287,23 @@ public class DataWedgePlugin extends Plugin {
 
     @PluginMethod
     public void suspendScanner(PluginCall call) {
-        sendCommand(call, implementation.suspendScanner(), "SCANNER_INPUT_PLUGIN");
+        setScannerDesiredState(call, true);
     }
 
     @PluginMethod
     public void resumeScanner(PluginCall call) {
-        sendCommand(call, implementation.resumeScanner(), "SCANNER_INPUT_PLUGIN");
+        setScannerDesiredState(call, false);
+    }
+
+    @PluginMethod
+    public void setScannerSuspended(PluginCall call) {
+        Boolean suspended = call.getBoolean("suspended");
+        if (suspended == null) {
+            call.reject("The suspended option is required", "PARAMETER_MISSING");
+            return;
+        }
+
+        setScannerDesiredState(call, suspended);
     }
 
     @PluginMethod
@@ -291,10 +395,161 @@ public class DataWedgePlugin extends Plugin {
             return;
         }
 
+        String profileName = notification.getString("PROFILE_NAME");
         JSObject ret = new JSObject();
         ret.put("status", status);
-        ret.put("profileName", notification.getString("PROFILE_NAME"));
+        ret.put("profileName", profileName);
         notifyListeners("scannerStatus", ret, true);
+
+        if (managedProfileName == null || !managedProfileName.equals(profileName)) return;
+
+        String previousStatus = scannerStatus;
+        scannerStatus = status;
+
+        if (scannerDesiredStateSet && scannerDesiredSuspended && canSuspendScanner(status)) {
+            scannerResetRequired = scannerResetRequired
+                || scannerSuspendedClaimed
+                || "IDLE".equals(previousStatus);
+            reconcileScannerState();
+        } else if (scannerDesiredStateSet && !scannerDesiredSuspended && canSuspendScanner(status)) {
+            scannerSuspendedClaimed = false;
+            resolvePendingScannerState(false);
+        } else if (scannerDesiredStateSet && scannerDesiredSuspended && "IDLE".equals(status)) {
+            resolvePendingScannerState(true);
+        }
+    }
+
+    private void setScannerDesiredState(PluginCall call, boolean suspended) {
+        if (pendingScannerStateCall != null) {
+            pendingScannerStateCall.resolve();
+        }
+
+        pendingScannerStateCall = call;
+        pendingScannerState = suspended;
+        scannerDesiredSuspended = suspended;
+        scannerDesiredStateSet = true;
+
+        if (!suspended) {
+            scannerResetRequired = false;
+            if (scannerReconcileRunnable != null) {
+                timeoutHandler.removeCallbacks(scannerReconcileRunnable);
+                scannerReconcileRunnable = null;
+            }
+        }
+
+        reconcileScannerState();
+    }
+
+    private void reconcileScannerState() {
+        if (!scannerDesiredStateSet || scannerCommandInFlight) return;
+
+        if (scannerDesiredSuspended) {
+            if (!canSuspendScanner(scannerStatus)) {
+                resolvePendingScannerState(true);
+                return;
+            }
+
+            if (scannerResetRequired) {
+                scannerResetRequired = false;
+                sendScannerResume(true);
+            } else {
+                sendScannerSuspend();
+            }
+            return;
+        }
+
+        if (pendingScannerStateCall != null && !pendingScannerState) {
+            sendScannerResume(false);
+        }
+    }
+
+    private void sendScannerSuspend() {
+        scannerCommandInFlight = true;
+        sendCommand(
+            implementation.suspendScanner(),
+            "SCANNER_INPUT_PLUGIN",
+            SEND_RESULT_LAST,
+            result -> {
+                scannerCommandInFlight = false;
+                if (isAcceptedScannerResult(result, "SCANNER_ALREADY_SUSPENDED")) {
+                    scannerSuspendedClaimed = true;
+                    if ("SCANNER_ALREADY_SUSPENDED".equals(result.resultCode)
+                        && canSuspendScanner(scannerStatus)) {
+                        scannerResetRequired = true;
+                    } else {
+                        resolvePendingScannerState(true);
+                    }
+                    if (!scannerDesiredSuspended || scannerResetRequired) {
+                        reconcileScannerState();
+                    }
+                } else {
+                    rejectPendingScannerState(true, result);
+                    Log.e(TAG, "Failed to suspend scanner: " + result.resultCode);
+                }
+            }
+        );
+    }
+
+    private void sendScannerResume(boolean resumeBeforeSuspend) {
+        scannerCommandInFlight = true;
+        sendCommand(
+            implementation.resumeScanner(),
+            "SCANNER_INPUT_PLUGIN",
+            SEND_RESULT_LAST,
+            result -> {
+                scannerCommandInFlight = false;
+                if (isAcceptedScannerResult(result, "SCANNER_ALREADY_RESUMED")) {
+                    scannerSuspendedClaimed = false;
+                    if (resumeBeforeSuspend && scannerDesiredSuspended) {
+                        scheduleScannerReconcile();
+                    } else {
+                        resolvePendingScannerState(false);
+                        if (scannerDesiredSuspended) {
+                            reconcileScannerState();
+                        }
+                    }
+                } else {
+                    rejectPendingScannerState(scannerDesiredSuspended, result);
+                    Log.e(TAG, "Failed to resume scanner: " + result.resultCode);
+                }
+            }
+        );
+    }
+
+    private void scheduleScannerReconcile() {
+        if (scannerReconcileRunnable != null) {
+            timeoutHandler.removeCallbacks(scannerReconcileRunnable);
+        }
+
+        scannerReconcileRunnable = () -> {
+            scannerReconcileRunnable = null;
+            reconcileScannerState();
+        };
+        timeoutHandler.postDelayed(scannerReconcileRunnable, SCANNER_RECONCILE_DELAY_MS);
+    }
+
+    private boolean canSuspendScanner(String status) {
+        return "WAITING".equals(status) || "SCANNING".equals(status);
+    }
+
+    private boolean isAcceptedScannerResult(CommandResult result, String acceptedResultCode) {
+        return result.success || acceptedResultCode.equals(result.resultCode);
+    }
+
+    private void resolvePendingScannerState(boolean suspended) {
+        if (pendingScannerStateCall == null || pendingScannerState != suspended) return;
+
+        PluginCall call = pendingScannerStateCall;
+        pendingScannerStateCall = null;
+        call.resolve();
+    }
+
+    private void rejectPendingScannerState(boolean suspended, CommandResult result) {
+        if (pendingScannerStateCall == null || pendingScannerState != suspended) return;
+
+        PluginCall call = pendingScannerStateCall;
+        pendingScannerStateCall = null;
+        rejectCall(call, result);
     }
 
     private void broadcast(Intent intent) {
@@ -409,6 +664,51 @@ public class DataWedgePlugin extends Plugin {
         pending.callback.onResult(new CommandResult(success, pending.commandName, resultCode, details));
     }
 
+    private void handleActiveProfileResult(Intent intent) {
+        String profileName = intent.getStringExtra(EXTRA_RESULT_GET_ACTIVE_PROFILE);
+        PendingActiveProfile pending;
+
+        synchronized (activeProfileLock) {
+            pending = pendingActiveProfile;
+            if (pending == null) return;
+        }
+
+        if (profileName == null || profileName.trim().isEmpty()) {
+            Log.d(TAG, "DataWedge active profile is temporarily empty; retrying");
+            timeoutHandler.postDelayed(() -> retryActiveProfileQuery(pending), ACTIVE_PROFILE_RETRY_DELAY_MS);
+            return;
+        }
+
+        synchronized (activeProfileLock) {
+            if (pendingActiveProfile != pending) return;
+            pendingActiveProfile = null;
+        }
+
+        timeoutHandler.removeCallbacks(pending.timeout);
+        Log.d(TAG, "Active DataWedge profile: " + profileName);
+        JSObject result = new JSObject();
+        result.put("name", profileName);
+        pending.call.resolve(result);
+    }
+
+    private void retryActiveProfileQuery(PendingActiveProfile pending) {
+        synchronized (activeProfileLock) {
+            if (pendingActiveProfile != pending) return;
+        }
+
+        try {
+            broadcast(implementation.getActiveProfile());
+        } catch (Exception e) {
+            synchronized (activeProfileLock) {
+                if (pendingActiveProfile != pending) return;
+                pendingActiveProfile = null;
+            }
+
+            timeoutHandler.removeCallbacks(pending.timeout);
+            pending.call.reject("Failed to query the active DataWedge profile", "BROADCAST_FAILED", e);
+        }
+    }
+
     private CommandResult parseCompleteCommandResult(
         Intent intent,
         String commandName,
@@ -511,6 +811,10 @@ public class DataWedgePlugin extends Plugin {
             String action = intent.getAction();
 
             if (DATAWEDGE_RESULT_ACTION.equals(action)) {
+                if (intent.hasExtra(EXTRA_RESULT_GET_ACTIVE_PROFILE)) {
+                    handleActiveProfileResult(intent);
+                    return;
+                }
                 handleCommandResult(intent);
                 return;
             }
@@ -554,6 +858,16 @@ public class DataWedgePlugin extends Plugin {
         private PendingCommand(String commandName, CommandResultCallback callback, Runnable timeout) {
             this.commandName = commandName;
             this.callback = callback;
+            this.timeout = timeout;
+        }
+    }
+
+    private static final class PendingActiveProfile {
+        private final PluginCall call;
+        private final Runnable timeout;
+
+        private PendingActiveProfile(PluginCall call, Runnable timeout) {
+            this.call = call;
             this.timeout = timeout;
         }
     }

@@ -7,6 +7,14 @@ export class DataWedgeWeb extends WebPlugin implements DataWedgePlugin {
     throw 'DataWedge is not supported on web';
   }
 
+  async deleteProfile(): Promise<void> {
+    throw 'DataWedge is not supported on web';
+  }
+
+  async getActiveProfile(): Promise<never> {
+    throw 'DataWedge is not supported on web';
+  }
+
   async enable(): Promise<void> {
     throw 'DataWedge is not supported on web';
   }
@@ -28,6 +36,10 @@ export class DataWedgeWeb extends WebPlugin implements DataWedgePlugin {
   }
 
   async resumeScanner(): Promise<void> {
+    throw 'DataWedge is not supported on web';
+  }
+
+  async setScannerSuspended(): Promise<void> {
     throw 'DataWedge is not supported on web';
   }
 

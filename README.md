@@ -38,6 +38,22 @@ registerProfile({
 }) => Promise<void>
 ```
 
+### deleteProfile(options: { name: string })
+
+Deletes a DataWedge profile by its exact, case-sensitive name. The promise is rejected with `PROFILE_NOT_FOUND` if the profile does not exist.
+
+```typescript
+deleteProfile({ name: 'LegacyProfile' }) => Promise<void>
+```
+
+### getActiveProfile()
+
+Returns the exact name of the DataWedge profile currently in use.
+
+```typescript
+getActiveProfile() => Promise<{ name: string }>
+```
+
 ### addListener('scan', ...)
 
 Registers a listener for incoming barcode data.
@@ -78,12 +94,22 @@ disableScanner() => Promise<void>
 
 Temporarily pauses or resumes scanner input without fully disabling and re-enabling the scanner plug-in. These methods are intended for fast scanner state changes between app screens.
 
-The scanner plug-in must be enabled before it can be suspended. Call `suspendScanner()` only after a `scannerStatus` event reports `WAITING` or `SCANNING`, and use `resumeScanner()` to restore scanning.
+The Android implementation tracks scanner status natively, waits for a suspendable state, and reconciles unexpected scanner reactivation.
 
 ```typescript
 suspendScanner() => Promise<void>
 resumeScanner() => Promise<void>
 ```
+
+### setScannerSuspended(...)
+
+Sets the desired scanner state through the native controller. Prefer this method when scanner availability follows app or screen lifecycle.
+
+```typescript
+setScannerSuspended(options: { suspended: boolean }) => Promise<void>
+```
+
+If DataWedge reports `WAITING` or `SCANNING` after a requested suspension, the controller resets the inconsistent DataWedge state and suspends it again. The controller only acts on the profile most recently passed to `registerProfile()`.
 
 ### startScanning() / stopScanning()
 

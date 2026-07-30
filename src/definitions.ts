@@ -55,11 +55,44 @@ export interface RegisterProfileOptions {
   intentAction?: string;
 }
 
+export interface DeleteProfileOptions {
+  /**
+   * Exact, case-sensitive name of the DataWedge profile to delete.
+   */
+  name: string;
+}
+
+export interface ActiveProfileResult {
+  /**
+   * Exact, case-sensitive name of the profile currently active in DataWedge.
+   */
+  name: string;
+}
+
+export interface SetScannerSuspendedOptions {
+  /**
+   * `true` to keep scanner input suspended; `false` to keep it resumed.
+   */
+  suspended: boolean;
+}
+
 export interface DataWedgePlugin {
   /**
    * Automatically register and configure a profile in DataWedge for the current application.
    */
   registerProfile(options?: RegisterProfileOptions): Promise<void>;
+
+  /**
+   * Deletes a DataWedge profile.
+   *
+   * Rejects with `PROFILE_NOT_FOUND` if the profile does not exist.
+   */
+  deleteProfile(options: DeleteProfileOptions): Promise<void>;
+
+  /**
+   * Gets the profile currently active in DataWedge.
+   */
+  getActiveProfile(): Promise<ActiveProfileResult>;
 
   /**
    * Enables DataWedge
@@ -116,6 +149,14 @@ export interface DataWedgePlugin {
    * Broadcasts intent action with `.SCANNER_INPUT_PLUGIN` extra set to `RESUME_PLUGIN`
    */
   resumeScanner(): Promise<void>;
+
+  /**
+   * Sets the desired scanner input state for the active managed profile.
+   *
+   * The Android implementation observes scanner status notifications and
+   * automatically reconciles unexpected `IDLE` to `WAITING` transitions.
+   */
+  setScannerSuspended(options: SetScannerSuspendedOptions): Promise<void>;
 
   /**
    * Starts software scanning trigger
