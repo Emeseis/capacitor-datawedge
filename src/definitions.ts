@@ -80,7 +80,9 @@ export interface DataWedgePlugin {
   disable(): Promise<void>;
 
   /**
-   * Enables physical scanner
+   * Enables the scanner input plug-in for the active DataWedge profile.
+   *
+   * This changes only the scanner's runtime state and does not persistently update the profile.
    *
    * Broadcasts intent action with `.SCANNER_INPUT_PLUGIN` extra set to `ENABLE_PLUGIN`
    *
@@ -89,7 +91,9 @@ export interface DataWedgePlugin {
   enableScanner(): Promise<void>;
 
   /**
-   * Disables physical scanner
+   * Disables the scanner input plug-in for the active DataWedge profile.
+   *
+   * This changes only the scanner's runtime state and does not persistently update the profile.
    *
    * Broadcasts intent action with `.SCANNER_INPUT_PLUGIN` extra set to `DISABLE_PLUGIN`
    *
@@ -98,14 +102,16 @@ export interface DataWedgePlugin {
   disableScanner(): Promise<void>;
 
   /**
-   * Temporarily suspends physical scanner input
+   * Temporarily suspends scanner input for the active DataWedge profile.
+   *
+   * Call only after scanner status reports `WAITING` or `SCANNING`.
    *
    * Broadcasts intent action with `.SCANNER_INPUT_PLUGIN` extra set to `SUSPEND_PLUGIN`
    */
   suspendScanner(): Promise<void>;
 
   /**
-   * Resumes physical scanner input after it was suspended
+   * Resumes scanner input after it was suspended for the active DataWedge profile.
    *
    * Broadcasts intent action with `.SCANNER_INPUT_PLUGIN` extra set to `RESUME_PLUGIN`
    */

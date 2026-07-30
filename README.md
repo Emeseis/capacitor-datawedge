@@ -24,7 +24,7 @@ The `registerProfile()` method automatically:
 
 ## API
 
-All methods are fully asynchronous and return a `Promise` after DataWedge confirms the command result. Profile registration validates the result of every configured module. The promise is rejected with the DataWedge result code when a command or profile module fails, or with `DATAWEDGE_TIMEOUT` when DataWedge does not respond within 10 seconds.
+All methods are fully asynchronous and return a `Promise` after DataWedge confirms the command result. Profile registration validates the result of every configured module. The promise is rejected with the DataWedge result code whenever DataWedge reports a failure, including `SCANNER_ALREADY_*` responses, or with `DATAWEDGE_TIMEOUT` when DataWedge does not respond within 10 seconds.
 
 ### registerProfile(options?: { name?: string; intentAction?: string })
 
@@ -67,7 +67,7 @@ addListener(
 
 ### enableScanner() / disableScanner()
 
-Enables or disables the physical scanning hardware.
+Enables or disables the Scanner Input Plug-in for the active DataWedge profile. This changes only its runtime state and does not persistently modify the profile.
 
 ```typescript
 enableScanner() => Promise<void>
@@ -119,7 +119,7 @@ async function example() {
       console.log('Format:', event.type);
     });
 
-    // 3. Ensure hardware is ready
+    // 3. Ensure scanner input is enabled for the active profile
     await DataWedge.enableScanner();
   } catch (err) {
     console.error('DataWedge Initialization Error:', err);
@@ -132,4 +132,4 @@ example();
 ## Hardware Requirements
 
 - Zebra devices (MC33, TC77, etc.) running Android.
-- DataWedge service (v7.1+) installed and active.
+- DataWedge service v8.0 or newer installed and active. Secure Intent Output targeting through `intent_component_info` requires DataWedge 8.0+.

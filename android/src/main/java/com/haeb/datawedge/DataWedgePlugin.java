@@ -97,6 +97,17 @@ public class DataWedgePlugin extends Plugin {
         String packageName = context.getPackageName();
         String intentAction = call.getString("intentAction");
 
+        if (profileName == null || profileName.trim().isEmpty()) {
+            call.reject("DataWedge profile name must not be empty", "PROFILE_NAME_EMPTY");
+            return;
+        }
+        profileName = profileName.trim();
+
+        if (intentAction != null && intentAction.trim().isEmpty()) {
+            call.reject("DataWedge scan intent action must not be empty", "PARAMETER_INVALID");
+            return;
+        }
+
         try {
             setScanIntent(context, intentAction);
         } catch (Exception e) {
@@ -105,17 +116,13 @@ public class DataWedgePlugin extends Plugin {
             return;
         }
 
-        Intent createIntent = new Intent();
-        createIntent.setAction("com.symbol.datawedge.api.ACTION");
-        createIntent.putExtra("com.symbol.datawedge.api.CREATE_PROFILE", profileName);
-
         Intent configIntent = new Intent();
         configIntent.setAction("com.symbol.datawedge.api.ACTION");
 
         Bundle profileConfig = new Bundle();
         profileConfig.putString("PROFILE_NAME", profileName);
         profileConfig.putString("PROFILE_ENABLED", "true");
-        profileConfig.putString("CONFIG_MODE", "UPDATE");
+        profileConfig.putString("CONFIG_MODE", "CREATE_IF_NOT_EXIST");
 
         Bundle appConfig = new Bundle();
         appConfig.putString("PACKAGE_NAME", packageName);
@@ -129,6 +136,7 @@ public class DataWedgePlugin extends Plugin {
         Bundle intentProps = new Bundle();
         intentProps.putString("intent_output_enabled", "true");
         intentProps.putString("intent_action", scanIntent);
+        intentProps.putString("intent_category", Intent.CATEGORY_DEFAULT);
         intentProps.putString("intent_delivery", "2");
 
         Bundle intentComponent = new Bundle();
@@ -161,47 +169,37 @@ public class DataWedgePlugin extends Plugin {
         profileConfig.putParcelableArrayList("PLUGIN_CONFIG", pluginConfigs);
 
         configIntent.putExtra("com.symbol.datawedge.api.SET_CONFIG", profileConfig);
-
-        sendCommand(createIntent, "CREATE_PROFILE", result -> {
-            if (result.success) {
-                sendCompleteCommand(call, configIntent, "SET_CONFIG");
-            } else if (isResultCode(result, "PROFILE_ALREADY_EXIST", "PROFILE_ALREADY_EXISTS")) {
-                profileConfig.remove("APP_LIST");
-                sendCompleteCommand(call, configIntent, "SET_CONFIG");
-            } else {
-                rejectCall(call, result);
-            }
-        });
+        sendCompleteCommand(call, configIntent, "SET_CONFIG");
     }
 
     @PluginMethod
     public void enable(PluginCall call) {
-        sendCommand(call, implementation.enable(), "ENABLE_DATAWEDGE", "DATAWEDGE_ALREADY_ENABLED");
+        sendCommand(call, implementation.enable(), "ENABLE_DATAWEDGE");
     }
 
     @PluginMethod
     public void disable(PluginCall call) {
-        sendCommand(call, implementation.disable(), "ENABLE_DATAWEDGE", "DATAWEDGE_ALREADY_DISABLED");
+        sendCommand(call, implementation.disable(), "ENABLE_DATAWEDGE");
     }
 
     @PluginMethod
     public void enableScanner(PluginCall call) {
-        sendCommand(call, implementation.enableScanner(), "SCANNER_INPUT_PLUGIN", "SCANNER_ALREADY_ENABLED");
+        sendCommand(call, implementation.enableScanner(), "SCANNER_INPUT_PLUGIN");
     }
 
     @PluginMethod
     public void disableScanner(PluginCall call) {
-        sendCommand(call, implementation.disableScanner(), "SCANNER_INPUT_PLUGIN", "SCANNER_ALREADY_DISABLED");
+        sendCommand(call, implementation.disableScanner(), "SCANNER_INPUT_PLUGIN");
     }
 
     @PluginMethod
     public void suspendScanner(PluginCall call) {
-        sendCommand(call, implementation.suspendScanner(), "SCANNER_INPUT_PLUGIN", "SCANNER_ALREADY_SUSPENDED");
+        sendCommand(call, implementation.suspendScanner(), "SCANNER_INPUT_PLUGIN");
     }
 
     @PluginMethod
     public void resumeScanner(PluginCall call) {
-        sendCommand(call, implementation.resumeScanner(), "SCANNER_INPUT_PLUGIN", "SCANNER_ALREADY_RESUMED");
+        sendCommand(call, implementation.resumeScanner(), "SCANNER_INPUT_PLUGIN");
     }
 
     @PluginMethod
@@ -228,16 +226,19 @@ public class DataWedgePlugin extends Plugin {
     }
 
     private void setScanIntent(Context context, String intentAction) {
-        if (intentAction == null || intentAction.trim().isEmpty() || intentAction.equals(scanIntent)) {
+        if (intentAction == null || intentAction.trim().isEmpty()) {
             return;
         }
+
+        String normalizedIntentAction = intentAction.trim();
+        if (normalizedIntentAction.equals(scanIntent)) return;
 
         if (isReceiverRegistered) {
             context.unregisterReceiver(broadcastReceiver);
             isReceiverRegistered = false;
         }
 
-        scanIntent = intentAction;
+        scanIntent = normalizedIntentAction;
         registerBroadcastReceiver(context);
     }
 
@@ -301,9 +302,9 @@ public class DataWedgePlugin extends Plugin {
         context.sendBroadcast(intent);
     }
 
-    private void sendCommand(PluginCall call, Intent intent, String commandName, String... acceptedResultCodes) {
+    private void sendCommand(PluginCall call, Intent intent, String commandName) {
         sendCommand(intent, commandName, SEND_RESULT_LAST, result -> {
-            if (result.success || isResultCode(result, acceptedResultCodes)) {
+            if (result.success) {
                 call.resolve();
             } else {
                 rejectCall(call, result);
@@ -319,10 +320,6 @@ public class DataWedgePlugin extends Plugin {
                 rejectCall(call, result);
             }
         });
-    }
-
-    private void sendCommand(Intent intent, String commandName, CommandResultCallback callback) {
-        sendCommand(intent, commandName, SEND_RESULT_LAST, callback);
     }
 
     private void sendCommand(
@@ -491,16 +488,6 @@ public class DataWedgePlugin extends Plugin {
 
         String[] resultCodes = resultInfo.getStringArray("RESULT_CODE");
         return resultCodes == null ? null : String.join(",", resultCodes);
-    }
-
-    private boolean isResultCode(CommandResult result, String... expectedCodes) {
-        if (result.resultCode == null) return false;
-
-        for (String expectedCode : expectedCodes) {
-            if (expectedCode.equals(result.resultCode)) return true;
-        }
-
-        return false;
     }
 
     private void rejectCall(PluginCall call, CommandResult result) {
